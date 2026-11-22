@@ -29,7 +29,7 @@ render_header('Sign in', null);
         <div class="col-md-6 col-lg-5">
             <div class="card p-4 p-md-5">
                 <h1 class="h4 mb-1">Welcome back</h1>
-                <p class="text-muted">Sign in to your <?= e(config('app.short_name')) ?> account.</p>
+                <p class="text-muted">Sign in to your <?= e(app_short_name()) ?> account.</p>
                 <form method="post" novalidate>
                     <?= csrf_field() ?>
                     <div class="mb-3">

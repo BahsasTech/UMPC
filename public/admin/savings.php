@@ -6,6 +6,31 @@ require_once __DIR__ . '/../../src/layout.php';
 
 $user = require_staff();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array((string) post('action', ''), ['verify_contribution', 'approve_target', 'reject_request'], true)) {
+    require_csrf();
+    try {
+        $request = get_savings_request((int) post('id', 0));
+        if (!$request || !can_review_savings_request($request, $user)) {
+            throw new RuntimeException('You are not allowed to review this request.');
+        }
+        $remarks = (string) post('remarks', '');
+        $action = (string) post('action');
+        if ($action === 'verify_contribution') {
+            $result = verify_savings_contribution((int) $request['id'], (int) $user['id'], $remarks);
+            flash('success', 'Contribution verified. Receipt ' . $result['receipt_no'] . '.');
+        } elseif ($action === 'approve_target') {
+            approve_savings_target_request((int) $request['id'], (int) $user['id'], $remarks);
+            flash('success', 'Savings target request approved.');
+        } else {
+            reject_savings_request((int) $request['id'], (int) $user['id'], $remarks);
+            flash('success', 'Request rejected.');
+        }
+    } catch (Throwable $e) {
+        flash('danger', $e->getMessage());
+    }
+    redirect('/admin/savings.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'contribute') {
     require_csrf();
     try {
@@ -24,6 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'contribute') {
     redirect('/admin/savings.php');
 }
 
+$requestFilters = ['status' => 'pending'];
+if (($user['role'] ?? '') !== 'admin') {
+    $requestFilters['assigned_user_id'] = (int) $user['id'];
+}
+$requests = list_savings_requests($requestFilters);
 $byProduct = report_savings_by_product();
 $grand = array_sum(array_map(fn($r) => (float) $r['balance'], $byProduct));
 $topAccounts = fetch_all(
@@ -46,6 +76,48 @@ render_header('Savings', $user, [
             </div>
         </div>
     <?php endforeach; ?>
+</div>
+
+<div class="card p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Verification queue</h5>
+        <span class="badge text-bg-warning"><?= count($requests) ?> pending</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead class="table-light"><tr><th>Member</th><th>Request</th><th>Details</th><th>Requested</th><th style="width: 340px;">Review</th></tr></thead>
+            <tbody>
+            <?php if ($requests === []): ?>
+                <tr><td colspan="5" class="text-center text-muted py-4">No pending requests.</td></tr>
+            <?php else: foreach ($requests as $r): ?>
+                <tr>
+                    <td><?= e($r['first_name'] . ' ' . $r['last_name']) ?><br><span class="text-muted small"><?= e($r['membership_no']) ?></span></td>
+                    <td><?= $r['type'] === 'contribution' ? 'Contribution' : 'Target request' ?><br><span class="text-muted small"><?= e(label((string) $r['product'])) ?></span></td>
+                    <td class="small">
+                        <?php if ($r['type'] === 'contribution'): ?>
+                            <?= money((float) $r['amount']) ?><br><span class="text-muted"><?= e(label((string) ($r['method'] ?? 'cash'))) ?> <?= e($r['reference'] ?? '') ?></span>
+                        <?php else: ?>
+                            <?= (float) $r['requested_target'] > 0 ? money((float) $r['requested_target']) : 'Reset to none' ?><br><span class="text-muted"><?= e($r['reason'] ?? '—') ?></span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="small text-muted"><?= e(fmt_date($r['requested_at'])) ?><br><?= e($r['requested_by_name']) ?></td>
+                    <td>
+                        <form method="post" class="d-flex gap-1">
+                            <?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                            <input class="form-control form-control-sm" name="remarks" maxlength="255" placeholder="Remarks">
+                            <?php if ($r['type'] === 'contribution'): ?>
+                                <button class="btn btn-sm btn-success" name="action" value="verify_contribution"><i class="bi bi-check-lg"></i> Verify</button>
+                            <?php else: ?>
+                                <button class="btn btn-sm btn-success" name="action" value="approve_target"><i class="bi bi-check-lg"></i> Approve</button>
+                            <?php endif; ?>
+                            <button class="btn btn-sm btn-outline-danger" name="action" value="reject_request" data-confirm="Reject this request?">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <div class="row g-4">

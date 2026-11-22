@@ -15,6 +15,8 @@ function nav_items(array $user): array
             ['label' => 'Loans',       'href' => '/admin/loans.php',    'icon' => 'cash-coin'],
             ['label' => 'Savings',     'href' => '/admin/savings.php',  'icon' => 'piggy-bank'],
             ['label' => 'Payments',    'href' => '/admin/payments.php', 'icon' => 'receipt'],
+            ['label' => 'Payment Approvals', 'href' => '/admin/payment-requests.php', 'icon' => 'check2-circle',
+             'match' => ['payment-requests.php']],
             ['label' => 'Online Payments', 'href' => '/admin/transactions.php', 'icon' => 'credit-card'],
             ['label' => 'Inventory',   'href' => '/admin/inventory.php', 'icon' => 'box-seam',
              'match' => ['inventory.php', 'product-form.php']],
@@ -26,6 +28,7 @@ function nav_items(array $user): array
              'match' => ['accounts.php', 'journal.php', 'ledger.php', 'trial-balance.php', 'financials.php']],
         ];
         if ($user['role'] === 'admin') {
+            $items[] = ['label' => 'System Settings', 'href' => '/admin/settings.php', 'icon' => 'gear'];
             $items[] = ['label' => 'Data Migration', 'href' => '/admin/data-migration.php', 'icon' => 'database-add'];
             $items[] = ['label' => 'Activity Log', 'href' => '/admin/audit.php', 'icon' => 'shield-check'];
         }
@@ -71,7 +74,7 @@ function render_tabs(array $tabs, string $active): void
 function render_header(string $title, ?array $user = null, array $opts = []): void
 {
     $current = basename($_SERVER['SCRIPT_NAME']);
-    $brand = config('app.short_name', 'UMPCSL');
+    $brand = app_short_name();
     ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -172,7 +175,7 @@ function render_footer(): void
     }
     ?>
     <footer class="app-footer text-center text-muted small py-4 mt-auto">
-        &copy; <?= date('Y') ?> <?= e(config('app.name')) ?>. All rights reserved.
+        &copy; <?= date('Y') ?> <?= e(app_name()) ?>. All rights reserved.
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/assets/js/app.js"></script>

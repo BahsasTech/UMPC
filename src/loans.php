@@ -153,15 +153,18 @@ function generate_schedule(int $loanId, float $totalRepayable, int $termMonths):
 /** Mark overdue unpaid installments as missed. */
 function refresh_missed_installments(?int $memberId = null): void
 {
-    $sql = 'UPDATE loan_schedule ls
-            JOIN loans l ON l.id = ls.loan_id
-            SET ls.status = "missed"
-            WHERE ls.due_date < CURDATE() AND ls.status IN ("pending","partial")
-              AND l.status IN ("disbursed","completed","defaulted")';
+    $params = [date('Y-m-d')];
+    $sql = 'UPDATE loan_schedule SET status = \'missed\'
+            WHERE due_date < ? AND status IN (\'pending\',\'partial\')
+              AND loan_id IN (
+                  SELECT id FROM loans
+                  WHERE status IN (\'disbursed\',\'completed\',\'defaulted\')';
     if ($memberId !== null) {
-        $sql .= ' AND l.member_id = ' . (int) $memberId;
+        $sql .= ' AND member_id = ?';
+        $params[] = $memberId;
     }
-    db()->exec($sql);
+    $sql .= ')';
+    q($sql, $params);
 }
 
 /** Approve a loan and generate its schedule. */
@@ -303,7 +306,7 @@ function record_loan_repayment(int $loanId, float $amount, array $meta = []): ar
             'status'      => 'confirmed',
             'narration'   => $meta['narration'] ?? ('Loan repayment for ' . $loan['loan_no']),
             'paid_at'     => $meta['paid_at'] ?? date('Y-m-d H:i:s'),
-            'recorded_by' => $_SESSION['user_id'] ?? null,
+            'recorded_by' => $meta['recorded_by'] ?? ($_SESSION['user_id'] ?? null),
         ]);
 
         $pdo->commit();

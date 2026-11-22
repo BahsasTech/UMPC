@@ -15,19 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'contribute') {
             $type = (string) post('type', '');
             $amount = to_amount(post('amount', 0));
-            $result = record_savings_contribution($memberId, $type, $amount, [
+            submit_savings_contribution_request($memberId, $type, $amount, [
                 'method'    => (string) post('method', 'bank_transfer'),
                 'reference' => (string) post('reference', ''),
                 'narration' => 'Member contribution to ' . (SAVINGS_PRODUCTS[$type] ?? $type),
-            ]);
-            safe_notify_member($memberId, 'savings_contribution', [
-                'amount'     => money($amount),
-                'receipt_no' => $result['receipt_no'],
-            ]);
-            flash('success', 'Contribution recorded. Receipt ' . $result['receipt_no'] . '.');
+            ], (int) $user['id']);
+            flash('success', 'Contribution submitted for verification.');
         } elseif ($action === 'target') {
-            set_savings_target($memberId, (string) post('type', ''), to_amount(post('target', 0)));
-            flash('success', 'Savings target updated.');
+            $target = to_amount(post('target', 0));
+            submit_savings_target_request($memberId, (string) post('type', ''), $target, (string) post('reason', ''), (int) $user['id']);
+            flash('success', $target > 0 ? 'Target change request submitted.' : 'Target reset request submitted.');
         }
     } catch (RuntimeException $e) {
         flash('danger', $e->getMessage());
@@ -37,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $summary = savings_summary($memberId);
 $statement = savings_statement($memberId, null, 50);
+$requests = list_savings_requests(['member_id' => $memberId]);
+$reviewer = assigned_reviewer_name($memberId);
 
 render_header('My Savings', $user);
 ?>
@@ -92,13 +91,14 @@ render_header('My Savings', $user);
                     <label class="form-label">Reference / teller no.</label>
                     <input class="form-control" name="reference">
                 </div>
-                <button class="btn btn-primary w-100"><i class="bi bi-plus-circle"></i> Record contribution</button>
+                <button class="btn btn-primary w-100"><i class="bi bi-send"></i> Submit for verification</button>
             </form>
         </div>
 
         <div class="card p-4">
-            <h5 class="mb-3">Set a savings target</h5>
-            <form method="post">
+            <h5 class="mb-3">Savings target request</h5>
+            <div class="alert alert-info small">Requests are reviewed by <strong><?= e($reviewer) ?></strong>.</div>
+            <form method="post" class="mb-3">
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="target">
                 <div class="mb-3">
@@ -110,16 +110,57 @@ render_header('My Savings', $user);
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Target amount</label>
-                    <input type="number" step="0.01" min="0" class="form-control" name="target" required>
+                    <label class="form-label">New target amount</label>
+                    <input type="number" step="0.01" min="1" class="form-control" name="target" required>
                 </div>
-                <button class="btn btn-outline-primary w-100"><i class="bi bi-bullseye"></i> Save target</button>
+                <div class="mb-3">
+                    <label class="form-label">Reason</label>
+                    <input class="form-control" name="reason" maxlength="255" placeholder="Optional">
+                </div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-bullseye"></i> Request target change</button>
+            </form>
+            <form method="post">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="target">
+                <input type="hidden" name="target" value="0">
+                <input type="hidden" name="reason" value="Member requested target reset">
+                <div class="mb-2">
+                    <label class="form-label">Product to reset</label>
+                    <select class="form-select" name="type" required>
+                        <?php foreach (SAVINGS_PRODUCTS as $type => $name): ?>
+                            <option value="<?= $type ?>"><?= e($name) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <button class="btn btn-outline-danger w-100"><i class="bi bi-arrow-counterclockwise"></i> Request target reset</button>
             </form>
         </div>
     </div>
 
     <div class="col-lg-7">
-        <div class="card p-4 h-100">
+        <div class="card p-4 mb-4">
+            <h5 class="mb-3">My requests</h5>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light"><tr><th>Date</th><th>Request</th><th>Details</th><th>Status</th><th>Remarks</th></tr></thead>
+                    <tbody>
+                    <?php if ($requests === []): ?>
+                        <tr><td colspan="5" class="text-center text-muted py-4">No requests yet.</td></tr>
+                    <?php else: foreach ($requests as $r): ?>
+                        <tr>
+                            <td><?= e(fmt_date($r['requested_at'])) ?></td>
+                            <td><?= $r['type'] === 'contribution' ? 'Contribution' : 'Target' ?><br><span class="text-muted small"><?= e(label((string) $r['product'])) ?></span></td>
+                            <td><?= $r['type'] === 'contribution' ? money((float) $r['amount']) : ($r['requested_target'] > 0 ? money((float) $r['requested_target']) : 'Reset to none') ?></td>
+                            <td><?= status_badge((string) $r['status']) ?></td>
+                            <td class="small text-muted"><?= e($r['review_remarks'] ?? '—') ?></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card p-4">
             <h5 class="mb-3">Savings statement</h5>
             <div class="table-responsive">
                 <table class="table align-middle mb-0">

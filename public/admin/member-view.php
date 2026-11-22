@@ -34,6 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 audit('member_status', 'members', $memberId, 'Status set to ' . $new);
                 flash('success', 'Member status changed to ' . $new . '.');
                 break;
+            case 'assign':
+                $assignee = (int) post('assigned_user_id', 0);
+                if ($assignee > 0) {
+                    $target = fetch_one('SELECT id FROM users WHERE id = ? AND role IN ("admin","staff") AND status = "active"', [$assignee]);
+                    if (!$target) {
+                        throw new RuntimeException('Selected reviewer is not an active staff account.');
+                    }
+                }
+                db_update('members', $memberId, ['assigned_user_id' => $assignee > 0 ? $assignee : null]);
+                audit('member_assignment', 'members', $memberId, $assignee > 0 ? 'Reviewer assigned' : 'Reviewer removed');
+                flash('success', $assignee > 0 ? 'Reviewer assigned.' : 'Reviewer removed.');
+                break;
             case 'savings':
                 $result = record_savings_contribution($memberId, (string) post('type'), to_amount(post('amount', 0)), [
                     'method' => (string) post('method', 'cash'),
@@ -85,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/admin/member-view.php?id=' . $memberId);
 }
 
+$reviewers = fetch_all('SELECT id, full_name, role FROM users WHERE role IN ("admin","staff") AND status = "active" ORDER BY full_name, id');
 $summary = savings_summary($memberId);
 $loans = member_loans($memberId);
 $payments = member_payment_history($memberId, 50);
@@ -111,6 +124,23 @@ render_header('Member · ' . $member['membership_no'], $user, [
                     <i class="bi bi-power"></i> <?= $member['status'] === 'active' ? 'Deactivate' : 'Activate' ?>
                 </button>
             </form>
+        </div>
+
+        <div class="card p-4 mb-4">
+            <h6 class="mb-3">Assigned reviewer</h6>
+            <form method="post" class="d-flex gap-2">
+                <?= csrf_field() ?><input type="hidden" name="action" value="assign">
+                <select class="form-select form-select-sm" name="assigned_user_id">
+                    <option value="0">Any staff member</option>
+                    <?php foreach ($reviewers as $reviewer): ?>
+                        <option value="<?= (int) $reviewer['id'] ?>" <?= (int) ($member['assigned_user_id'] ?? 0) === (int) $reviewer['id'] ? 'selected' : '' ?>>
+                            <?= e($reviewer['full_name']) ?> · <?= e(label($reviewer['role'])) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button class="btn btn-sm btn-outline-primary">Save</button>
+            </form>
+            <div class="small text-muted mt-2">This user verifies the member's savings requests.</div>
         </div>
 
         <div class="card p-4 mb-4">

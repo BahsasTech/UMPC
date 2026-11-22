@@ -29,15 +29,20 @@ echo "UMPCSL seeder\n-------------\n";
 
 if ($reset) {
     echo "• Resetting tables...\n";
-    db()->exec('SET FOREIGN_KEY_CHECKS = 0');
-    foreach (['sale_items', 'sales', 'stock_movements', 'products', 'product_categories',
-              'journal_lines', 'journals', 'accounts',
-              'notifications', 'transactions', 'payments', 'loan_schedule', 'loan_collateral', 'loan_guarantors', 'loans',
-              'savings_accounts', 'referrals', 'nominees', 'next_of_kin', 'members',
-              'import_logs', 'audit_logs', 'users', 'settings'] as $table) {
-        db()->exec("TRUNCATE TABLE `$table`");
+    $tables = ['sale_items', 'sales', 'stock_movements', 'products', 'product_categories',
+               'journal_lines', 'journals', 'accounts',
+               'notifications', 'transactions', 'payments', 'loan_schedule', 'loan_collateral', 'loan_guarantors', 'loans',
+                 'savings_accounts', 'savings_requests', 'payment_requests', 'referrals', 'nominees', 'next_of_kin', 'members',
+                'import_uploads', 'import_logs', 'audit_logs', 'users', 'settings', 'notification_templates', 'app_sessions'];
+    if (db_driver() === 'pgsql') {
+        db()->exec('TRUNCATE TABLE ' . implode(', ', $tables) . ' RESTART IDENTITY CASCADE');
+    } else {
+        db()->exec('SET FOREIGN_KEY_CHECKS = 0');
+        foreach ($tables as $table) {
+            db()->exec("TRUNCATE TABLE `$table`");
+        }
+        db()->exec('SET FOREIGN_KEY_CHECKS = 1');
     }
-    db()->exec('SET FOREIGN_KEY_CHECKS = 1');
 }
 
 ensure_default_accounts();
@@ -50,7 +55,7 @@ $settings = [
     'loan_min_guarantors'=> '2',
 ];
 foreach ($settings as $key => $value) {
-    q('INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)', [$key, $value]);
+    setting_set($key, $value);
 }
 echo "✓ Settings saved.\n";
 

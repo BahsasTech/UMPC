@@ -59,7 +59,7 @@ render_header('Create account', null);
         <div class="col-lg-8">
             <div class="card p-4 p-md-5">
                 <h1 class="h4 mb-1">Become a member</h1>
-                <p class="text-muted">Join <?= e(config('app.name')) ?>.</p>
+                <p class="text-muted">Join <?= e(app_name()) ?>.</p>
 
                 <?php foreach ($errors as $error): ?>
                     <div class="alert alert-danger py-2"><?= e($error) ?></div>

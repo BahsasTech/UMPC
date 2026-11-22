@@ -196,9 +196,9 @@ function recalc() {
     const discount = parseFloat(document.getElementById('discount').value) || 0;
     const total = Math.max(0, subtotal - discount);
     const fmt = n => n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    document.getElementById('subtotal').textContent = <?= json_encode(config('app.currency')) ?> + fmt(subtotal);
-    document.getElementById('discountOut').textContent = <?= json_encode(config('app.currency')) ?> + fmt(discount);
-    document.getElementById('grandTotal').textContent = <?= json_encode(config('app.currency')) ?> + fmt(total);
+    document.getElementById('subtotal').textContent = <?= json_encode(app_currency()) ?> + fmt(subtotal);
+    document.getElementById('discountOut').textContent = <?= json_encode(app_currency()) ?> + fmt(discount);
+    document.getElementById('grandTotal').textContent = <?= json_encode(app_currency()) ?> + fmt(total);
 }
 </script>
 <?php render_footer(); ?>

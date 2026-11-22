@@ -5,12 +5,136 @@ declare(strict_types=1);
  * Small collection of shared helper functions.
  */
 
+/** Read an environment variable (real env, then $_ENV/$_SERVER). */
+function env(string $key, $default = null)
+{
+    $value = getenv($key);
+    if ($value !== false && $value !== '') {
+        return $value;
+    }
+    foreach ([$_ENV, $_SERVER] as $source) {
+        if (array_key_exists($key, $source) && $source[$key] !== '') {
+            return $source[$key];
+        }
+    }
+    return $default;
+}
+
+/** Apply deployment environment variables on top of the PHP config file. */
+function config_apply_env(array $config): array
+{
+    if (env('APP_URL')) {
+        $config['app']['url'] = rtrim((string) env('APP_URL'), '/');
+    }
+    if (env('APP_NAME')) {
+        $config['app']['name'] = (string) env('APP_NAME');
+    }
+    if (env('APP_TIMEZONE')) {
+        $config['app']['timezone'] = (string) env('APP_TIMEZONE');
+    }
+
+    $driver = strtolower((string) env('DB_DRIVER', (string) ($config['db']['driver'] ?? 'mysql')));
+    if (in_array($driver, ['pgsql', 'postgres', 'postgresql'], true)) {
+        $driver = 'pgsql';
+    }
+    $config['db']['driver'] = $driver;
+    if ($driver === 'pgsql' && (string) $config['db']['port'] === '3306' && env('DB_PORT') === null) {
+        $config['db']['port'] = 5432;
+    }
+
+    $databaseUrl = env('DATABASE_URL') ?: env('POSTGRES_URL');
+    if ($databaseUrl) {
+        $parts = parse_url((string) $databaseUrl);
+        if ($parts === false || empty($parts['host'])) {
+            throw new RuntimeException('DATABASE_URL is not a valid connection URL.');
+        }
+        $scheme = strtolower((string) ($parts['scheme'] ?? 'postgres'));
+        $config['db']['driver'] = str_starts_with($scheme, 'mysql') ? 'mysql' : 'pgsql';
+        $config['db']['host'] = (string) $parts['host'];
+        $config['db']['port'] = (int) ($parts['port'] ?? ($config['db']['driver'] === 'mysql' ? 3306 : 5432));
+        $config['db']['database'] = ltrim((string) ($parts['path'] ?? ''), '/');
+        $config['db']['username'] = urldecode((string) ($parts['user'] ?? ''));
+        $config['db']['password'] = urldecode((string) ($parts['pass'] ?? ''));
+        parse_str((string) ($parts['query'] ?? ''), $query);
+        if (!empty($query['sslmode'])) {
+            $config['db']['sslmode'] = (string) $query['sslmode'];
+        }
+        if (!empty($query['pgbouncer'])) {
+            $config['db']['pgbouncer'] = filter_var($query['pgbouncer'], FILTER_VALIDATE_BOOLEAN);
+        }
+        if (!empty($query['charset']) && $config['db']['driver'] === 'mysql') {
+            $config['db']['charset'] = (string) $query['charset'];
+        }
+    }
+
+    foreach ([
+        'DB_HOST' => 'host', 'DB_PORT' => 'port', 'DB_NAME' => 'database',
+        'DB_USER' => 'username', 'DB_PASS' => 'password', 'DB_CHARSET' => 'charset',
+    ] as $envKey => $key) {
+        if (env($envKey) !== null) {
+            $config['db'][$key] = env($envKey);
+        }
+    }
+    if (env('DB_SSLMODE')) {
+        $config['db']['sslmode'] = (string) env('DB_SSLMODE');
+    }
+    if (env('DB_PGBOUNCER') !== null) {
+        $config['db']['pgbouncer'] = filter_var(env('DB_PGBOUNCER'), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    if (env('SESSION_DRIVER')) {
+        $config['session']['driver'] = (string) env('SESSION_DRIVER');
+    }
+    if (env('SESSION_SECURE') !== null) {
+        $config['session']['secure'] = filter_var(env('SESSION_SECURE'), FILTER_VALIDATE_BOOLEAN);
+    }
+    if (env('STORAGE_DRIVER')) {
+        $config['storage']['driver'] = (string) env('STORAGE_DRIVER');
+    }
+    foreach ([
+        'SUPABASE_URL' => 'url',
+        'SUPABASE_SERVICE_ROLE_KEY' => 'service_role_key',
+        'SUPABASE_BUCKET_PHOTOS' => 'bucket_photos',
+        'SUPABASE_BUCKET_PRODUCTS' => 'bucket_products',
+    ] as $envKey => $key) {
+        if (env($envKey) !== null) {
+            $config['storage']['supabase'][$key] = (string) env($envKey);
+        }
+    }
+
+    return $config;
+}
+
 /** Read a config value using dot notation, e.g. config('db.host'). */
 function config(?string $key = null, $default = null)
 {
     static $config = null;
     if ($config === null) {
-        $config = require APP_ROOT . '/config/config.php';
+        $file = APP_ROOT . '/config/config.php';
+        $base = file_exists($file) ? require $file : [];
+        $defaults = [
+            'db' => [
+                'driver' => 'mysql',
+                'host' => '127.0.0.1',
+                'port' => 3306,
+                'database' => 'umpcsl',
+                'username' => 'root',
+                'password' => '',
+                'charset' => 'utf8mb4',
+                'pgbouncer' => false,
+            ],
+            'session' => ['driver' => 'files', 'secure' => null],
+            'storage' => [
+                'driver' => 'local',
+                'supabase' => [
+                    'url' => '',
+                    'service_role_key' => '',
+                    'bucket_photos' => 'umpcsl-photos',
+                    'bucket_products' => 'umpcsl-products',
+                ],
+            ],
+        ];
+        $config = config_apply_env(array_replace_recursive($defaults, is_array($base) ? $base : []));
     }
     if ($key === null) {
         return $config;
@@ -25,6 +149,67 @@ function config(?string $key = null, $default = null)
     return $value;
 }
 
+/** Cached settings table, loaded once per request. */
+function settings_all(bool $force = false): array
+{
+    static $rows = null;
+    if ($force || $rows === null) {
+        $rows = [];
+        try {
+            if (function_exists('db')) {
+                foreach (db()->query('SELECT `key`, `value` FROM settings') as $row) {
+                    $rows[(string) $row['key']] = (string) $row['value'];
+                }
+            }
+        } catch (Throwable $e) {
+            $rows = [];
+        }
+    }
+    return $rows;
+}
+
+/** Read a setting saved by an administrator, falling back to a default. */
+function setting_get(string $key, ?string $default = null): string
+{
+    $rows = settings_all();
+    $value = $rows[$key] ?? null;
+    return $value !== null && $value !== '' ? $value : (string) $default;
+}
+
+/** Insert or update a settings row on both MySQL and PostgreSQL. */
+function setting_set(string $key, string $value): void
+{
+    $sql = db_driver() === 'pgsql'
+        ? 'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON CONFLICT (`key`) DO UPDATE SET `value` = EXCLUDED.`value`'
+        : 'INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)';
+    q($sql, [$key, $value]);
+    settings_all(true);
+}
+
+/** Admin-editable organisation display name. */
+function app_name(): string
+{
+    return setting_get('app.name', setting_get('org_name', (string) config('app.name', 'UMPCSL')));
+}
+
+/** Admin-editable short brand name. */
+function app_short_name(): string
+{
+    return setting_get('app.short_name', (string) config('app.short_name', 'UMPCSL'));
+}
+
+/** Admin-editable currency symbol. */
+function app_currency(): string
+{
+    return setting_get('app.currency', (string) config('app.currency', '₦'));
+}
+
+/** Admin-editable PHP timezone. */
+function app_timezone(): string
+{
+    return setting_get('app.timezone', (string) config('app.timezone', 'Africa/Lagos'));
+}
+
 /** Escape a value for safe HTML output. */
 function e($value): string
 {
@@ -35,7 +220,7 @@ function e($value): string
 function money($amount, bool $symbol = true): string
 {
     $formatted = number_format((float) $amount, 2);
-    return $symbol ? config('app.currency') . $formatted : $formatted;
+    return $symbol ? app_currency() . $formatted : $formatted;
 }
 
 /** Format a date/time value, returning a dash when empty. */

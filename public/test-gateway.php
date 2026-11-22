@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'approve') {
         try {
             finalize_transaction($reference, gateway_verify('test', $txn));
-            flash('success', 'Payment approved. ' . money((float) $txn['amount']) . ' received.');
+            flash('success', 'Payment received. Your account will be updated after staff verification.');
         } catch (RuntimeException $e) {
             flash('danger', $e->getMessage());
         }
@@ -61,7 +61,7 @@ render_header('Test payment gateway', $user);
                 <p class="text-muted small mb-0">This is a simulator. No real money moves.</p>
             </div>
             <dl class="row mb-3">
-                <dt class="col-5 text-muted">Merchant</dt><dd class="col-7"><?= e(config('app.name')) ?></dd>
+                <dt class="col-5 text-muted">Merchant</dt><dd class="col-7"><?= e(app_name()) ?></dd>
                 <dt class="col-5 text-muted">Reference</dt><dd class="col-7"><?= e($txn['reference']) ?></dd>
                 <dt class="col-5 text-muted">Purpose</dt><dd class="col-7"><?= e(label($txn['purpose'])) ?></dd>
                 <dt class="col-5 text-muted">Amount</dt><dd class="col-7 fw-semibold"><?= money((float) $txn['amount']) ?></dd>

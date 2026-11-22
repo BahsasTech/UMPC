@@ -20,7 +20,7 @@ render_header('Receipt ' . $payment['receipt_no'], $user, [
 ?>
 <div class="card p-4 receipt">
     <div class="text-center border-bottom pb-3 mb-4">
-        <h4 class="mb-0"><?= e(config('app.name')) ?></h4>
+        <h4 class="mb-0"><?= e(app_name()) ?></h4>
         <div class="text-muted">Official payment receipt</div>
     </div>
     <div class="row mb-4">

@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** High level figures for the admin dashboard. */
 function admin_overview(): array
 {
+    $monthStart = date('Y-m-01');
     return [
         'members'          => (int) fetch_value('SELECT COUNT(*) FROM members'),
         'active_members'   => (int) fetch_value('SELECT COUNT(*) FROM members WHERE status = "active"'),
@@ -17,8 +18,8 @@ function admin_overview(): array
         'loans_active'     => (int) fetch_value('SELECT COUNT(*) FROM loans WHERE status IN ("disbursed","defaulted")'),
         'loans_pending'    => (int) fetch_value('SELECT COUNT(*) FROM loans WHERE status IN ("pending","under_review")'),
         'missed'           => (int) fetch_value('SELECT COUNT(*) FROM loan_schedule WHERE status = "missed"'),
-        'contributions_month' => (float) fetch_value('SELECT COALESCE(SUM(amount),0) FROM payments WHERE status = "confirmed" AND paid_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")'),
-        'repayments_month' => (float) fetch_value('SELECT COALESCE(SUM(amount),0) FROM payments WHERE status = "confirmed" AND type = "loan_repayment" AND paid_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")'),
+        'contributions_month' => (float) fetch_value('SELECT COALESCE(SUM(amount),0) FROM payments WHERE status = "confirmed" AND paid_at >= ?', [$monthStart]),
+        'repayments_month' => (float) fetch_value('SELECT COALESCE(SUM(amount),0) FROM payments WHERE status = "confirmed" AND type = "loan_repayment" AND paid_at >= ?', [$monthStart]),
     ];
 }
 
@@ -35,13 +36,22 @@ function report_savings_by_product(): array
 /** Monthly contribution trend for the current year. */
 function report_monthly_contributions(int $year): array
 {
-    return fetch_all(
-        'SELECT DATE_FORMAT(paid_at, "%Y-%m") AS period, COALESCE(SUM(amount),0) AS total, COUNT(*) AS count
-         FROM payments
-         WHERE status = "confirmed" AND YEAR(paid_at) = ?
-         GROUP BY period ORDER BY period',
-        [$year]
+    $rows = fetch_all(
+        'SELECT paid_at, amount FROM payments
+         WHERE status = "confirmed" AND paid_at >= ? AND paid_at < ?',
+        [sprintf('%04d-01-01', $year), sprintf('%04d-01-01', $year + 1)]
     );
+    $months = [];
+    foreach ($rows as $row) {
+        $period = substr((string) $row['paid_at'], 0, 7);
+        if (!isset($months[$period])) {
+            $months[$period] = ['period' => $period, 'total' => 0.0, 'count' => 0];
+        }
+        $months[$period]['total'] += (float) $row['amount'];
+        $months[$period]['count']++;
+    }
+    ksort($months);
+    return array_values($months);
 }
 
 /** Loan portfolio breakdown by status. */

@@ -5,9 +5,8 @@ declare(strict_types=1);
  * Online payment gateways: Paystack, Remita and a built-in test simulator.
  *
  * A "transaction" records every checkout attempt. Once the gateway confirms
- * payment (callback or webhook), finalize_transaction() applies it to the
- * relevant domain (savings contribution, loan repayment or store order) using
- * the same functions as a counter payment, so the ledger stays consistent.
+ * payment (callback or webhook), finalize_transaction() queues a payment
+ * request for staff approval; the domain posting happens only after approval.
  */
 
 const PAYMENT_PROVIDERS = [
@@ -80,8 +79,7 @@ function save_gateway_settings(array $data): void
             continue;
         }
         $value = is_bool($data[$key]) ? ($data[$key] ? '1' : '0') : (string) $data[$key];
-        q('INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
-            ['pay_' . $key, $value]);
+        setting_set('pay_' . $key, $value);
     }
     audit('gateway_settings', null, null, 'Online payment gateway settings updated');
 }
@@ -389,8 +387,9 @@ function webhook_verify(string $provider, string $rawBody, array $headers = []):
  * ===================================================================*/
 
 /**
- * Apply a confirmed payment to its domain once (idempotent). Posts through the
- * normal savings/loan/sale functions so the ledger and stock stay correct.
+ * Record a gateway-confirmed payment as pending staff approval. The domain
+ * posting happens only when staff approve the matching payment request, so
+ * member balances and dashboards stay unchanged until then.
  */
 function finalize_transaction(string $reference, array $verify): array
 {
@@ -420,36 +419,44 @@ function finalize_transaction(string $reference, array $verify): array
         throw new RuntimeException('The paid amount (' . money((float) $verify['amount']) . ') does not match the amount due (' . money($expected) . ').');
     }
 
+    $existing = fetch_one('SELECT id FROM payment_requests WHERE transaction_reference = ?', [$reference]);
+    if ($existing) {
+        transaction_update((int) $txn['id'], [
+            'status'             => 'success',
+            'paid_at'            => $txn['paid_at'] ?: date('Y-m-d H:i:s'),
+            'provider_reference' => $txn['provider_reference'] ?: $reference,
+            'gateway_response'   => json_encode($verify['raw'] ?? $verify),
+        ]);
+        return ['status' => 'success', 'duplicate' => true, 'payment_request_id' => (int) $existing['id'], 'transaction' => get_transaction($reference)];
+    }
+
     $memberId = (int) $txn['member_id'];
+    if ($memberId <= 0) {
+        throw new RuntimeException('This transaction is not linked to a member.');
+    }
     $amount = $expected;
     $meta = transaction_meta($txn);
     $method = in_array((string) $txn['provider'], ['paystack', 'remita'], true) ? (string) $txn['provider'] : 'other';
-    $paymentMeta = [
-        'method'    => $method,
-        'reference' => $reference,
-        'paid_at'   => date('Y-m-d H:i:s'),
-        'narration' => 'Online payment (' . (PAYMENT_PROVIDERS[$txn['provider']] ?? $txn['provider']) . ')',
-    ];
-
-    $paymentId = null;
-    $orderNo = '';
     $purpose = (string) $txn['purpose'];
+    $requestType = isset(PAYMENT_REQUEST_TYPES[$purpose]) ? $purpose : 'other';
+    $relatedId = null;
+    $payload = [];
+
     try {
         if ($purpose === 'savings') {
             $product = (string) ($meta['product'] ?? 'monthly');
-            $res = record_savings_contribution($memberId, $product, $amount, $paymentMeta);
-            $paymentId = (int) $res['payment_id'];
+            if (!array_key_exists($product, SAVINGS_PRODUCTS)) {
+                throw new RuntimeException('Unknown savings product for this payment.');
+            }
+            $account = get_savings_account($memberId, $product);
+            $relatedId = (int) $account['id'];
+            $payload['product'] = $product;
         } elseif ($purpose === 'loan_repayment') {
-            $loan = fetch_one('SELECT * FROM loans WHERE id = ?', [(int) $txn['related_id']]);
+            $loan = fetch_one('SELECT id FROM loans WHERE id = ? AND member_id = ?', [(int) $txn['related_id'], $memberId]);
             if (!$loan) {
                 throw new RuntimeException('Loan not found for this payment.');
             }
-            $pay = min($amount, (float) $loan['outstanding']);
-            if ($pay <= 0) {
-                throw new RuntimeException('This loan has no outstanding balance.');
-            }
-            $res = record_loan_repayment((int) $loan['id'], $pay, $paymentMeta);
-            $paymentId = (int) $res['payment_id'];
+            $relatedId = (int) $loan['id'];
         } elseif ($purpose === 'order') {
             $sale = get_sale((int) $txn['related_id']);
             if (!$sale) {
@@ -458,11 +465,7 @@ function finalize_transaction(string $reference, array $verify): array
             if ($sale['status'] === 'cancelled') {
                 throw new RuntimeException('This order was cancelled.');
             }
-            $orderNo = (string) $sale['sale_no'];
-            mark_sale_paid((int) $sale['id'], $method, $reference);
-        } else {
-            $res = record_payment($memberId, 'other', $amount, $paymentMeta);
-            $paymentId = !empty($res['payment_id']) ? (int) $res['payment_id'] : null;
+            $relatedId = (int) $sale['id'];
         }
     } catch (Throwable $e) {
         transaction_update((int) $txn['id'], [
@@ -472,23 +475,34 @@ function finalize_transaction(string $reference, array $verify): array
         throw $e;
     }
 
+    $member = fetch_one('SELECT user_id FROM members WHERE id = ?', [$memberId]);
+    $requestedBy = (int) ($txn['initiated_by'] ?? 0) ?: (int) ($member['user_id'] ?? 0);
+    $requestId = submit_payment_request([
+        'member_id'            => $memberId,
+        'type'                 => $requestType,
+        'related_id'           => $relatedId,
+        'amount'               => $amount,
+        'method'               => $method,
+        'reference'            => $reference,
+        'narration'            => 'Online payment (' . (PAYMENT_PROVIDERS[$txn['provider']] ?? $txn['provider']) . ')',
+        'payload'              => $payload,
+        'transaction_reference'=> $reference,
+        'requested_by'         => $requestedBy,
+    ]);
+
     transaction_update((int) $txn['id'], [
         'status'             => 'success',
         'paid_at'            => date('Y-m-d H:i:s'),
         'provider_reference' => $txn['provider_reference'] ?: $reference,
-        'payment_id'         => $paymentId,
         'gateway_response'   => json_encode($verify['raw'] ?? $verify),
     ]);
 
-    if ($memberId > 0) {
-        safe_notify_member($memberId, 'payment_received', [
-            'amount'    => money($amount),
-            'purpose'   => label($purpose),
-            'reference' => $reference,
-            'order_no'  => $orderNo,
-        ]);
-    }
-    audit('payment_received', 'transactions', (int) $txn['id'], $reference . ' ' . money($amount) . ' via ' . $txn['provider']);
+    safe_notify_member($memberId, 'payment_submitted', [
+        'amount'    => money($amount),
+        'purpose'   => label($purpose),
+        'reference' => $reference,
+    ]);
+    audit('online_payment_received', 'transactions', (int) $txn['id'], $reference . ' ' . money($amount) . ' via ' . $txn['provider'] . ' (awaiting approval)');
 
-    return ['status' => 'success', 'duplicate' => false, 'transaction' => get_transaction($reference)];
+    return ['status' => 'success', 'duplicate' => false, 'payment_request_id' => $requestId, 'transaction' => get_transaction($reference)];
 }

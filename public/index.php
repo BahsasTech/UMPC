@@ -21,7 +21,7 @@ $features = [
 render_header('Home', null);
 ?>
 <section class="hero text-center mb-5">
-    <h1 class="display-6 fw-bold"><?= e(config('app.name')) ?></h1>
+    <h1 class="display-6 fw-bold"><?= e(app_name()) ?></h1>
     <p class="lead mb-4">A modern cooperative society management platform for savings, loans, members and payments.</p>
     <div class="d-flex gap-2 justify-content-center">
         <a href="/register.php" class="btn btn-warning btn-lg"><i class="bi bi-person-plus"></i> Become a member</a>

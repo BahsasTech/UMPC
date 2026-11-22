@@ -253,7 +253,7 @@ function import_storage_dir(): string
     return $dir;
 }
 
-/** Store an uploaded CSV and return its token. */
+/** Store an uploaded CSV in the database and return its token. */
 function import_save_upload(array $file): string
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -266,24 +266,35 @@ function import_save_upload(array $file): string
     if (!in_array($ext, ['csv', 'txt'], true)) {
         throw new RuntimeException('Please upload a .csv file.');
     }
-    $token = bin2hex(random_bytes(16)) . '.csv';
-    $dest = import_storage_dir() . DIRECTORY_SEPARATOR . $token;
-    if (!move_uploaded_file($file['tmp_name'], $dest)) {
-        throw new RuntimeException('Could not store the uploaded file.');
+    $content = file_get_contents($file['tmp_name']);
+    if ($content === false) {
+        throw new RuntimeException('Could not read the uploaded file.');
     }
+    $token = bin2hex(random_bytes(16)) . '.csv';
+    q('INSERT INTO import_uploads (token, filename, content) VALUES (?, ?, ?)',
+        [$token, (string) ($file['name'] ?? ''), $content]);
     return $token;
 }
 
-/** Resolve a token to a readable path, guarding against traversal. */
+/** Resolve a token to a readable local path, guarding against traversal. */
 function import_token_path(string $token): string
 {
     if (!preg_match('/^[a-f0-9]{32}\.csv$/', $token)) {
         throw new RuntimeException('Invalid import reference.');
     }
-    $path = import_storage_dir() . DIRECTORY_SEPARATOR . $token;
-    if (!is_file($path)) {
+    $row = fetch_one('SELECT content FROM import_uploads WHERE token = ?', [$token]);
+    if ($row === null) {
         throw new RuntimeException('The uploaded file has expired. Please upload it again.');
     }
+    $path = import_storage_dir() . DIRECTORY_SEPARATOR . str_replace('.csv', '.tmp.csv', $token);
+    if (file_put_contents($path, (string) $row['content']) === false) {
+        throw new RuntimeException('Could not prepare the uploaded file for import.');
+    }
+    register_shutdown_function(static function () use ($path): void {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    });
     return $path;
 }
 
@@ -293,7 +304,8 @@ function import_delete_token(string $token): void
     if (!preg_match('/^[a-f0-9]{32}\.csv$/', $token)) {
         return;
     }
-    $path = import_storage_dir() . DIRECTORY_SEPARATOR . $token;
+    q('DELETE FROM import_uploads WHERE token = ?', [$token]);
+    $path = import_storage_dir() . DIRECTORY_SEPARATOR . str_replace('.csv', '.tmp.csv', $token);
     if (is_file($path)) {
         @unlink($path);
     }

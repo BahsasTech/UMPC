@@ -190,23 +190,13 @@ function save_product_image(array $file, int $productId): string
     }
     $ext = image_type_to_extension($info[2], false) ?: 'jpg';
     $name = 'product-' . $productId . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
-    $dir = (string) config('uploads.products_dir');
-    if (!is_dir($dir)) {
-        mkdir($dir, 0775, true);
-    }
-    if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) {
-        throw new RuntimeException('Could not store the uploaded image.');
-    }
-    return $name;
+    return storage_put('products', $name, $file['tmp_name'], (string) ($info['mime'] ?? 'image/jpeg'));
 }
 
 /** URL for a product image or a placeholder. */
 function product_image_url(?string $filename): string
 {
-    if ($filename && file_exists((string) config('uploads.products_dir') . DIRECTORY_SEPARATOR . $filename)) {
-        return '/uploads/products/' . rawurlencode($filename);
-    }
-    return '/assets/img/product.svg';
+    return storage_url('products', $filename) ?? '/assets/img/product.svg';
 }
 
 /* =====================================================================
@@ -427,7 +417,7 @@ function create_sale(array $data, array $items): int
         post_sale_accounting($saleId);
     }
     $sale = get_sale($saleId);
-    if ($sale && !empty($sale['member_id'])) {
+    if ($sale && !empty($sale['member_id']) && in_array($status, ['paid', 'fulfilled', 'completed'], true)) {
         safe_notify_member((int) $sale['member_id'], 'sale_receipt', [
             'amount'     => money((float) $sale['total']),
             'receipt_no' => $sale['sale_no'],

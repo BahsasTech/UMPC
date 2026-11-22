@@ -71,10 +71,15 @@ function notification_config(): array
     return $cache = $cfg;
 }
 
-/** Notification templates keyed by event name. */
-function notification_templates(): array
+/** Notification templates keyed by event name, with admin overrides. */
+function notification_templates(bool $force = false): array
 {
-    return [
+    static $cache = null;
+    if ($cache !== null && !$force) {
+        return $cache;
+    }
+
+    $templates = [
         'welcome' => [
             'email_subject' => 'Welcome to {org}',
             'email_body'    => "Dear {first_name},\n\nWelcome to {org}. Your membership number is {membership_no}.\n\nYou can now sign in to track your savings and loans.\n\nRegards,\n{org}",
@@ -145,13 +150,108 @@ function notification_templates(): array
             'email_body'    => "Dear {first_name},\n\nWe have received your online payment of {amount} for {purpose}.\nReference: {reference}\n\nThank you.\n\nRegards,\n{org}",
             'sms'           => 'Payment of {amount} received for {purpose}. Ref {reference}. Thank you {first_name}.',
         ],
+        'payment_submitted' => [
+            'email_subject' => 'Payment awaiting verification',
+            'email_body'    => "Dear {first_name},\n\nWe have received your {purpose} payment of {amount} (reference {reference}).\nIt will appear in your account after staff verification.\n\nRegards,\n{org}",
+            'sms'           => '{purpose} payment of {amount} received. Ref {reference}. Awaiting verification.',
+        ],
+        'payment_approved' => [
+            'email_subject' => 'Payment verified',
+            'email_body'    => "Dear {first_name},\n\nYour {purpose} payment of {amount} has been verified and posted to your account.\nReceipt: {receipt_no}\n\nRegards,\n{org}",
+            'sms'           => '{purpose} payment of {amount} verified. Receipt {receipt_no}.',
+        ],
+        'payment_rejected' => [
+            'email_subject' => 'Payment not verified',
+            'email_body'    => "Dear {first_name},\n\nYour {purpose} payment of {amount} was not verified.\nRemarks: {remarks}\n\nPlease contact the co-operative office.\n\nRegards,\n{org}",
+            'sms'           => '{purpose} payment of {amount} was not verified. {remarks}',
+        ],
+        'contribution_submitted' => [
+            'email_subject' => 'Contribution awaiting verification',
+            'email_body'    => "Dear {first_name},\n\nYour contribution of {amount} has been submitted and is awaiting verification.\n\nRegards,\n{org}",
+            'sms'           => 'Contribution of {amount} submitted for verification.',
+        ],
+        'contribution_approved' => [
+            'email_subject' => 'Contribution verified',
+            'email_body'    => "Dear {first_name},\n\nYour contribution of {amount} has been verified.\nReceipt: {receipt_no}\n\nRegards,\n{org}",
+            'sms'           => 'Contribution of {amount} verified. Receipt {receipt_no}.',
+        ],
+        'contribution_rejected' => [
+            'email_subject' => 'Contribution not verified',
+            'email_body'    => "Dear {first_name},\n\nYour contribution of {amount} was not verified.\nRemarks: {remarks}\n\nRegards,\n{org}",
+            'sms'           => 'Contribution of {amount} was not verified. {remarks}',
+        ],
+        'target_requested' => [
+            'email_subject' => 'Savings target request received',
+            'email_body'    => "Dear {first_name},\n\nYour request for {product} ({target}) is awaiting approval.\n\nRegards,\n{org}",
+            'sms'           => 'Savings target request for {product} received.',
+        ],
+        'target_approved' => [
+            'email_subject' => 'Savings target request approved',
+            'email_body'    => "Dear {first_name},\n\nYour savings target for {product} is now {target}.\n\nRegards,\n{org}",
+            'sms'           => 'Savings target for {product} is now {target}.',
+        ],
+        'target_rejected' => [
+            'email_subject' => 'Savings target request declined',
+            'email_body'    => "Dear {first_name},\n\nYour savings target request for {product} was declined.\nRemarks: {remarks}\n\nRegards,\n{org}",
+            'sms'           => 'Savings target request declined. {remarks}',
+        ],
     ];
+
+    try {
+        $rows = fetch_all('SELECT event_key, email_subject, email_body, sms FROM notification_templates');
+        foreach ($rows as $row) {
+            $event = (string) $row['event_key'];
+            if (!isset($templates[$event])) {
+                continue;
+            }
+            foreach (['email_subject', 'email_body', 'sms'] as $field) {
+                $value = (string) $row[$field];
+                if ($value !== '') {
+                    $templates[$event][$field] = $value;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+    }
+
+    return $cache = $templates;
+}
+
+/** Save an admin override for one notification template. */
+function notification_template_save(string $event, array $template): void
+{
+    $templates = notification_templates();
+    if (!isset($templates[$event])) {
+        throw new RuntimeException('Unknown notification event.');
+    }
+
+    $values = [
+        'event_key'     => $event,
+        'email_subject' => (string) ($template['email_subject'] ?? $templates[$event]['email_subject']),
+        'email_body'    => (string) ($template['email_body'] ?? $templates[$event]['email_body']),
+        'sms'           => (string) ($template['sms'] ?? $templates[$event]['sms']),
+    ];
+    $sql = db_driver() === 'pgsql'
+        ? 'INSERT INTO notification_templates (event_key, email_subject, email_body, sms)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (event_key) DO UPDATE SET
+             email_subject = EXCLUDED.email_subject,
+             email_body = EXCLUDED.email_body,
+             sms = EXCLUDED.sms'
+        : 'INSERT INTO notification_templates (event_key, email_subject, email_body, sms)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             email_subject = VALUES(email_subject),
+             email_body = VALUES(email_body),
+             sms = VALUES(sms)';
+    q($sql, array_values($values));
+    notification_templates(true);
 }
 
 /** Replace {placeholder} tokens with values. */
 function render_template(string $text, array $vars): string
 {
-    $vars['org'] = $vars['org'] ?? (string) config('app.name');
+    $vars['org'] = $vars['org'] ?? app_name();
     $replace = [];
     foreach ($vars as $key => $value) {
         $replace['{' . $key . '}'] = is_scalar($value) ? (string) $value : '';
@@ -238,7 +338,7 @@ function notify_member(int $memberId, string $event, array $vars = [], ?array $c
         'first_name' => $member['first_name'],
         'last_name'  => $member['last_name'],
         'membership_no' => $member['membership_no'],
-        'org'        => (string) config('app.name'),
+        'org'        => app_name(),
     ], $vars);
 
     $template = $templates[$event];
@@ -277,6 +377,22 @@ function safe_notify_member(int $memberId, string $event, array $vars = [], ?arr
         notify_member($memberId, $event, $vars, $channels);
     } catch (Throwable $e) {
         // Never let a notification failure affect the primary action.
+    }
+}
+
+function notify_assigned_reviewer(int $memberId, string $subject, string $body): void
+{
+    try {
+        $member = fetch_one('SELECT assigned_user_id FROM members WHERE id = ?', [$memberId]);
+        $userId = (int) ($member['assigned_user_id'] ?? 0);
+        if ($userId === 0) {
+            return;
+        }
+        $user = fetch_one('SELECT email FROM users WHERE id = ? AND role IN ("admin","staff")', [$userId]);
+        if ($user && !empty($user['email'])) {
+            notify_email((string) $user['email'], $subject, $body, ['member_id' => $memberId]);
+        }
+    } catch (Throwable $e) {
     }
 }
 
@@ -421,8 +537,7 @@ function save_notification_settings(array $data): void
             continue;
         }
         $value = is_bool($data[$key]) ? ($data[$key] ? '1' : '0') : (string) $data[$key];
-        q('INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
-            ['notify_' . $key, $value]);
+        setting_set('notify_' . $key, $value);
     }
     audit('notification_settings', null, null, 'Notification provider settings updated');
 }

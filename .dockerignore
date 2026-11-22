@@ -1,0 +1,10 @@
+.git
+.vercel
+config/config.php
+public/uploads/photos/*
+!public/uploads/photos/.gitkeep
+public/uploads/products/*
+!public/uploads/products/.gitkeep
+*.log
+.DS_Store
+Thumbs.db

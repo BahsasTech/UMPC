@@ -119,21 +119,11 @@ function save_passport_photo(array $file, int $memberId): string
     }
     $ext = image_type_to_extension($info[2], false) ?: 'jpg';
     $name = 'member-' . $memberId . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
-    $dir = (string) config('uploads.photos_dir');
-    if (!is_dir($dir)) {
-        mkdir($dir, 0775, true);
-    }
-    if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) {
-        throw new RuntimeException('Could not store the uploaded photo.');
-    }
-    return $name;
+    return storage_put('photos', $name, $file['tmp_name'], (string) ($info['mime'] ?? 'image/jpeg'));
 }
 
 /** URL for a member's passport photo or a placeholder. */
 function photo_url(?string $filename): string
 {
-    if ($filename && file_exists((string) config('uploads.photos_dir') . DIRECTORY_SEPARATOR . $filename)) {
-        return '/uploads/photos/' . rawurlencode($filename);
-    }
-    return '/assets/img/avatar.svg';
+    return storage_url('photos', $filename) ?? '/assets/img/avatar.svg';
 }

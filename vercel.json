@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "container",
+  "crons": [
+    {
+      "path": "/cron.php",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

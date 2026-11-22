@@ -22,7 +22,7 @@ render_header('Account Statement', $user, [
 <div class="card p-4">
     <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
         <div>
-            <h4 class="mb-0"><?= e(config('app.name')) ?></h4>
+            <h4 class="mb-0"><?= e(app_name()) ?></h4>
             <div class="text-muted small">Account statement</div>
         </div>
         <div class="text-end small">

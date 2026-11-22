@@ -2,12 +2,43 @@
 declare(strict_types=1);
 
 /**
- * Database connection helpers (PDO / MySQL).
+ * Database connection helpers (PDO / MySQL or PostgreSQL/Supabase).
  */
 
-/**
- * Return a shared PDO connection to the application database.
- */
+/** Return the configured database driver: mysql or pgsql. */
+function db_driver(): string
+{
+    $driver = strtolower((string) config('db.driver', 'mysql'));
+    return in_array($driver, ['pgsql', 'postgres', 'postgresql'], true) ? 'pgsql' : 'mysql';
+}
+
+/** Build the PDO DSN for the configured driver. */
+function db_dsn(bool $withDatabase = true): string
+{
+    $cfg = config('db');
+    if (db_driver() === 'pgsql') {
+        $parts = [
+            'host=' . (string) $cfg['host'],
+            'port=' . (int) ($cfg['port'] ?: 5432),
+        ];
+        if ($withDatabase) {
+            $parts[] = 'dbname=' . (string) $cfg['database'];
+        }
+        if (!empty($cfg['sslmode'])) {
+            $parts[] = 'sslmode=' . (string) $cfg['sslmode'];
+        }
+        return 'pgsql:' . implode(';', $parts);
+    }
+
+    $charset = (string) ($cfg['charset'] ?: 'utf8mb4');
+    $dsn = sprintf('mysql:host=%s;port=%d;charset=%s', $cfg['host'], (int) $cfg['port'], $charset);
+    if ($withDatabase) {
+        $dsn .= ';dbname=' . $cfg['database'];
+    }
+    return $dsn;
+}
+
+/** Return a shared PDO connection to the application database. */
 function db(): PDO
 {
     static $pdo = null;
@@ -16,43 +47,200 @@ function db(): PDO
     }
 
     $cfg = config('db');
-    $dsn = sprintf(
-        'mysql:host=%s;port=%d;dbname=%s;charset=%s',
-        $cfg['host'],
-        (int) $cfg['port'],
-        $cfg['database'],
-        $cfg['charset']
-    );
-
-    $pdo = new PDO($dsn, $cfg['username'], $cfg['password'], [
+    $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-    ]);
+    ];
+    $pgsql = db_driver() === 'pgsql';
+    $pooled = $pgsql && !empty($cfg['pgbouncer']);
+    $options[PDO::ATTR_EMULATE_PREPARES] = $pooled;
+    $connect = static function (array $options) use ($cfg): PDO {
+        return new PDO(db_dsn(), (string) $cfg['username'], (string) $cfg['password'], $options);
+    };
+
+    try {
+        $pdo = $connect($options);
+    } catch (PDOException $e) {
+        if (!preg_match('/attribute|not support/i', $e->getMessage())) {
+            throw $e;
+        }
+        unset($options[PDO::ATTR_EMULATE_PREPARES]);
+        $pdo = $connect($options);
+    }
+
+    if ($pgsql && !$pooled) {
+        $pdo->exec("SET TIME ZONE '" . str_replace("'", '', (string) config('app.timezone', 'Africa/Lagos')) . "'");
+    }
 
     return $pdo;
 }
 
 /**
- * Open a connection to the MySQL server without selecting a database.
- * Used by the migration script to create the schema.
+ * Open a server-level connection. PostgreSQL manages databases outside the app,
+ * so the migration uses the normal connection there.
  */
 function db_server(): PDO
 {
+    if (db_driver() === 'pgsql') {
+        return db();
+    }
     $cfg = config('db');
-    $dsn = sprintf('mysql:host=%s;port=%d;charset=%s', $cfg['host'], (int) $cfg['port'], $cfg['charset']);
-
-    return new PDO($dsn, $cfg['username'], $cfg['password'], [
+    return new PDO(db_dsn(false), (string) $cfg['username'], (string) $cfg['password'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ]);
 }
 
 /**
- * Run a query and return the statement.
+ * Translate the small amount of MySQL-specific SQL used by the app into
+ * PostgreSQL syntax. Strings, quoted identifiers and comments are tokenized
+ * first so replacements only touch executable SQL.
  */
+function db_portable_sql(string $sql): string
+{
+    if (db_driver() !== 'pgsql') {
+        return $sql;
+    }
+
+    $parts = [];
+    $work = '';
+    $length = strlen($sql);
+    $i = 0;
+    $salt = bin2hex(random_bytes(6));
+    $addPart = static function (string $fragment) use (&$parts, &$work, $salt): void {
+        $token = '__UMP' . $salt . '_' . count($parts) . '__';
+        $parts[$token] = $fragment;
+        $work .= $token;
+    };
+
+    while ($i < $length) {
+        $char = $sql[$i];
+        $next = $i + 1 < $length ? $sql[$i + 1] : '';
+
+        if ($char === "'") {
+            $buffer = "'";
+            $j = $i + 1;
+            while ($j < $length) {
+                $c = $sql[$j];
+                $n = $j + 1 < $length ? $sql[$j + 1] : '';
+                if ($c === '\\' && $n !== '') {
+                    $buffer .= $c . $n;
+                    $j += 2;
+                    continue;
+                }
+                if ($c === "'") {
+                    if ($n === "'") {
+                        $buffer .= "''";
+                        $j += 2;
+                        continue;
+                    }
+                    $buffer .= "'";
+                    $j++;
+                    break;
+                }
+                $buffer .= $c;
+                $j++;
+            }
+            $addPart($buffer);
+            $i = $j;
+            continue;
+        }
+
+        if ($char === '"') {
+            $buffer = '"';
+            $j = $i + 1;
+            while ($j < $length) {
+                $c = $sql[$j];
+                $n = $j + 1 < $length ? $sql[$j + 1] : '';
+                if ($c === '\\' && $n !== '') {
+                    $buffer .= $c . $n;
+                    $j += 2;
+                    continue;
+                }
+                if ($c === '"') {
+                    $buffer .= '"';
+                    $j++;
+                    break;
+                }
+                $buffer .= $c;
+                $j++;
+            }
+            $content = stripslashes(substr($buffer, 1, -1));
+            $addPart("'" . str_replace("'", "''", $content) . "'");
+            $i = $j;
+            continue;
+        }
+
+        if ($char === '`') {
+            $identifier = '';
+            $j = $i + 1;
+            while ($j < $length) {
+                if ($sql[$j] === '`') {
+                    if ($j + 1 < $length && $sql[$j + 1] === '`') {
+                        $identifier .= '`';
+                        $j += 2;
+                        continue;
+                    }
+                    $j++;
+                    break;
+                }
+                $identifier .= $sql[$j++];
+            }
+            $addPart('"' . str_replace('"', '""', $identifier) . '"');
+            $i = $j;
+            continue;
+        }
+
+        if ($char === '-' && $next === '-') {
+            $j = $i;
+            while ($j < $length && $sql[$j] !== "\n") {
+                $j++;
+            }
+            $addPart(substr($sql, $i, $j - $i));
+            $i = $j;
+            continue;
+        }
+
+        if ($char === '$' && preg_match('/^(\$([A-Za-z_][A-Za-z0-9_]*)?\$)/', substr($sql, $i, 64), $m)) {
+            $tag = $m[1];
+            $close = strpos($sql, $tag, $i + strlen($tag));
+            $buffer = $close === false
+                ? substr($sql, $i)
+                : substr($sql, $i, $close + strlen($tag) - $i);
+            $addPart($buffer);
+            $i += strlen($buffer);
+            continue;
+        }
+
+        $work .= $char;
+        $i++;
+    }
+
+    $work = preg_replace_callback('/DATE_FORMAT\(\s*([^,]+?)\s*,\s*(__UMP[A-Za-z0-9]+_\d+__)\s*\)/i', static function ($m) use ($parts) {
+        $format = trim((string) ($parts[$m[2]] ?? "''"), "'");
+        $format = str_replace(['%Y', '%m', '%d'], ['YYYY', 'MM', 'DD'], $format);
+        return 'to_char(' . trim($m[1]) . ", '" . $format . "')";
+    }, $work);
+
+    $work = preg_replace('/\bCURDATE\(\)/i', 'CURRENT_DATE', $work);
+    $work = preg_replace('/\bIFNULL\(/i', 'COALESCE(', $work);
+    $work = preg_replace_callback('/\bDATE\(\s*([^()]+?)\s*\)/i', static function ($m) {
+        return 'CAST(' . trim($m[1]) . ' AS DATE)';
+    }, $work);
+    $work = preg_replace_callback('/\bYEAR\(\s*([^()]+?)\s*\)/i', static function ($m) {
+        return 'EXTRACT(YEAR FROM ' . trim($m[1]) . ')';
+    }, $work);
+    $work = preg_replace_callback('/\bDATE_ADD\(\s*([^,]+?)\s*,\s*INTERVAL\s+(\d+)\s+DAY\s*\)/i', static function ($m) {
+        return '(' . trim($m[1]) . " + INTERVAL '" . (int) $m[2] . " DAY')";
+    }, $work);
+    $work = preg_replace('/\bLIKE\b/i', 'ILIKE', $work);
+
+    return strtr((string) $work, $parts);
+}
+
+/** Run a query and return the statement. */
 function q(string $sql, array $params = []): PDOStatement
 {
-    $stmt = db()->prepare($sql);
+    $stmt = db()->prepare(db_portable_sql($sql));
     $stmt->execute($params);
     return $stmt;
 }
@@ -87,6 +275,9 @@ function db_insert(string $table, array $data): int
         implode(', ', $cols),
         implode(', ', $placeholders)
     );
+    if (db_driver() === 'pgsql') {
+        return (int) q($sql . ' RETURNING id', $data)->fetchColumn();
+    }
     q($sql, $data);
     return (int) db()->lastInsertId();
 }

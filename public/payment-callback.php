@@ -41,7 +41,7 @@ if ($txn['provider'] !== 'test' && $txn['status'] !== 'success') {
         $verify = gateway_verify((string) $txn['provider'], $txn);
         $result = finalize_transaction($reference, $verify);
         if ($result['status'] === 'success') {
-            $notice = ['success', 'Payment confirmed. Thank you!'];
+            $notice = ['success', 'Payment received. Your account will be updated after staff verification.'];
         } elseif ($result['status'] === 'pending') {
             $notice = ['info', 'Your payment is still pending confirmation.'];
         } else {

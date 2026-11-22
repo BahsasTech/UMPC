@@ -99,7 +99,7 @@ render_header('Dashboard', $user);
                     </tfoot>
                 </table>
             </div>
-            <a href="/savings.php" class="btn btn-outline-primary mt-3"><i class="bi bi-arrow-right"></i> View savings &amp; make a contribution</a>
+            <a href="/savings.php" class="btn btn-outline-primary mt-3"><i class="bi bi-send"></i> Make a contribution / request target change</a>
         </div>
     </div>
 

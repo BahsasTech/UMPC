@@ -16,19 +16,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$loan) {
             throw new RuntimeException('Loan not found.');
         }
-        $result = record_loan_repayment($loanId, to_amount(post('amount', 0)), [
-            'method'    => (string) post('method', 'bank_transfer'),
-            'reference' => (string) post('reference', ''),
-            'narration' => 'Member repayment for ' . $loan['loan_no'],
+        $amount = to_amount(post('amount', 0));
+        $reference = (string) post('reference', '');
+        submit_payment_request([
+            'member_id'    => $memberId,
+            'type'         => 'loan_repayment',
+            'related_id'   => $loanId,
+            'amount'       => $amount,
+            'method'       => (string) post('method', 'bank_transfer'),
+            'reference'    => $reference,
+            'narration'    => 'Member repayment for ' . $loan['loan_no'],
+            'requested_by' => (int) $user['id'],
         ]);
-        safe_notify_member($memberId, 'repayment_received', [
-            'loan_no'     => $loan['loan_no'],
-            'amount'      => money(to_amount(post('amount', 0))),
-            'outstanding' => money($result['outstanding']),
-            'receipt_no'  => $result['receipt_no'],
+        safe_notify_member($memberId, 'payment_submitted', [
+            'amount'  => money($amount),
+            'purpose' => 'Loan repayment (' . $loan['loan_no'] . ')',
+            'reference'=> $reference ?: '—',
         ]);
-        flash('success', 'Repayment recorded. Receipt ' . $result['receipt_no']
-            . ($result['completed'] ? '. Loan fully repaid!' : '.'));
+        flash('success', 'Repayment submitted for verification. Your balance will update once staff approve it.');
     } catch (RuntimeException $e) {
         flash('danger', $e->getMessage());
     }

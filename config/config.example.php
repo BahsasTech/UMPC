@@ -14,12 +14,31 @@ return [
         'timezone'  => 'Africa/Lagos',
     ],
     'db' => [
+        // mysql (XAMPP/MySQL) or pgsql (Supabase/PostgreSQL).
+        'driver'   => 'mysql',
         'host'     => '127.0.0.1',
         'port'     => 3306,
         'database' => 'umpcsl',
         'username' => 'root',
         'password' => '',
         'charset'  => 'utf8mb4',
+        // 'sslmode' => 'require',  // used by pgsql; Supabase requires TLS
+        // 'pgbouncer' => false,    // true disables server-side prepared statements
+    ],
+    // 'files' for a single local server, 'database' for Vercel/multi-instance.
+    'session' => [
+        'driver' => 'files',
+        // 'secure' => null, // true/false override; null auto-detects the request
+    ],
+    // 'local' writes to public/uploads; 'supabase' uses Supabase Storage.
+    'storage' => [
+        'driver' => 'local',
+        'supabase' => [
+            'url'             => '', // e.g. https://<ref>.supabase.co
+            'service_role_key'=> '', // never expose this in the browser
+            'bucket_photos'   => 'umpcsl-photos',
+            'bucket_products' => 'umpcsl-products',
+        ],
     ],
     // Online payment gateways. Values here are defaults; they can be overridden
     // at runtime from Admin -> Online Payments -> Gateway settings (in `settings`).

@@ -108,6 +108,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $recent = fetch_all('SELECT * FROM transactions WHERE member_id = ? ORDER BY id DESC LIMIT 10', [$memberId]);
+$requestsByReference = [];
+foreach (member_payment_requests($memberId) as $request) {
+    if ($request['transaction_reference']) {
+        $requestsByReference[$request['transaction_reference']] = $request;
+    }
+}
 
 render_header('Make a Payment', $user);
 ?>
@@ -210,6 +216,9 @@ render_header('Make a Payment', $user);
                             <div>
                                 <div><?= money($t['amount']) ?> <span class="text-muted small">· <?= e(label($t['purpose'])) ?></span></div>
                                 <div class="text-muted small"><?= e(fmt_date($t['created_at'], 'd M Y H:i')) ?> · <?= e($t['reference']) ?></div>
+                                <?php if (($requestsByReference[$t['reference']]['status'] ?? '') === 'pending'): ?>
+                                    <div class="small text-warning mt-1">Awaiting staff verification</div>
+                                <?php endif; ?>
                             </div>
                             <?= status_badge($t['status']) ?>
                         </li>
