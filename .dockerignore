@@ -1,5 +1,7 @@
 .git
 .vercel
+.env*
+supabase/.temp
 config/config.php
 public/uploads/photos/*
 !public/uploads/photos/.gitkeep
