@@ -88,8 +88,9 @@ function config_apply_env(array $config): array
     if (env('SESSION_SECURE') !== null) {
         $config['session']['secure'] = filter_var(env('SESSION_SECURE'), FILTER_VALIDATE_BOOLEAN);
     }
-    if (env('STORAGE_DRIVER')) {
-        $config['storage']['driver'] = (string) env('STORAGE_DRIVER');
+    $storageDriver = env('APP_STORAGE_DRIVER') ?: env('STORAGE_DRIVER');
+    if ($storageDriver) {
+        $config['storage']['driver'] = (string) $storageDriver;
     }
     foreach ([
         'SUPABASE_URL' => 'url',

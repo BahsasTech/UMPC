@@ -129,7 +129,7 @@ imports are stored in the database so multiple instances stay in sync.
 | `APP_TIMEZONE` | `Africa/Lagos` | PHP timezone |
 | `DB_PGBOUNCER` | `1` | Set when using Supabase transaction pooler |
 | `SESSION_DRIVER` | `database` | Shared PHP sessions |
-| `STORAGE_DRIVER` | `supabase` | Store uploads in Supabase Storage |
+| `APP_STORAGE_DRIVER` | `supabase` | Store uploads in Supabase Storage (do not use `STORAGE_DRIVER` on Vercel—it conflicts with the container builder) |
 | `SUPABASE_URL` | `https://<ref>.supabase.co` | Storage API base URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | Storage API key (server-side only) |
 | `CRON_SECRET` | long random string | Protects `/cron.php` |
@@ -353,7 +353,7 @@ Walk-in sales default to `completed`; online orders start `pending`.
 
 **Exports:** `export.php?type=products|stock|sales` (also linked from the admin
 screens). Product images live in `public/uploads/products/` locally, or in the
-Supabase `umpcsl-products` bucket when `STORAGE_DRIVER=supabase`.
+Supabase `umpcsl-products` bucket when `APP_STORAGE_DRIVER=supabase`.
 
 ---
 
