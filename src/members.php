@@ -40,6 +40,15 @@ function member_for_user(int $userId): ?array
     return fetch_one('SELECT * FROM members WHERE user_id = ?', [$userId]);
 }
 
+function find_member_by_membership_no(string $membershipNo): ?array
+{
+    $membershipNo = trim($membershipNo);
+    if ($membershipNo === '') {
+        return null;
+    }
+    return fetch_one('SELECT * FROM members WHERE membership_no = ?', [$membershipNo]);
+}
+
 /** Get a member profile (joined with user account) by member id. */
 function get_member(int $memberId): ?array
 {

@@ -431,6 +431,36 @@ CREATE TABLE IF NOT EXISTS import_uploads (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS monthly_contribution_batches (
+    id          SERIAL PRIMARY KEY,
+    batch_no    VARCHAR(30) NOT NULL UNIQUE,
+    period      CHAR(7) NOT NULL,
+    filename    VARCHAR(190),
+    total_rows  INTEGER NOT NULL DEFAULT 0,
+    posted      INTEGER NOT NULL DEFAULT 0,
+    skipped     INTEGER NOT NULL DEFAULT 0,
+    failed      INTEGER NOT NULL DEFAULT 0,
+    uploaded_by INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS monthly_contribution_items (
+    id           SERIAL PRIMARY KEY,
+    batch_id     INTEGER NOT NULL REFERENCES monthly_contribution_batches (id) ON DELETE CASCADE,
+    member_id    INTEGER NOT NULL REFERENCES members (id) ON DELETE CASCADE,
+    membership_no VARCHAR(30) NOT NULL,
+    period       CHAR(7) NOT NULL,
+    amount       NUMERIC(15,2) NOT NULL,
+    status       VARCHAR(20) NOT NULL DEFAULT 'posted' CHECK (status IN ('posted','skipped','failed')),
+    receipt_no   VARCHAR(30),
+    payment_id   INTEGER REFERENCES payments (id) ON DELETE SET NULL,
+    error        VARCHAR(255),
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_mci_batch_member UNIQUE (batch_id, membership_no),
+    CONSTRAINT uq_mci_member_period UNIQUE (member_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_mci_status ON monthly_contribution_items (status);
+
 -- MySQL's ON UPDATE CURRENT_TIMESTAMP equivalent for the tables that use it.
 CREATE OR REPLACE FUNCTION umpcsl_set_updated_at() RETURNS TRIGGER AS $$
 BEGIN

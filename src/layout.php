@@ -28,6 +28,8 @@ function nav_items(array $user): array
              'match' => ['accounts.php', 'journal.php', 'ledger.php', 'trial-balance.php', 'financials.php']],
         ];
         if ($user['role'] === 'admin') {
+            $items[] = ['label' => 'Monthly Contributions', 'href' => '/admin/monthly-contributions.php', 'icon' => 'upload',
+                        'match' => ['monthly-contributions.php']];
             $items[] = ['label' => 'System Settings', 'href' => '/admin/settings.php', 'icon' => 'gear'];
             $items[] = ['label' => 'Data Migration', 'href' => '/admin/data-migration.php', 'icon' => 'database-add'];
             $items[] = ['label' => 'Activity Log', 'href' => '/admin/audit.php', 'icon' => 'shield-check'];

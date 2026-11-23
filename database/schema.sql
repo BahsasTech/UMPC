@@ -590,4 +590,38 @@ CREATE TABLE IF NOT EXISTS import_uploads (
     PRIMARY KEY (token)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS monthly_contribution_batches (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_no    VARCHAR(30)  NOT NULL UNIQUE,
+    period      CHAR(7)      NOT NULL,
+    filename    VARCHAR(190) DEFAULT NULL,
+    total_rows  INT          NOT NULL DEFAULT 0,
+    posted      INT          NOT NULL DEFAULT 0,
+    skipped     INT          NOT NULL DEFAULT 0,
+    failed      INT          NOT NULL DEFAULT 0,
+    uploaded_by INT UNSIGNED DEFAULT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mcb_uploader FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS monthly_contribution_items (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_id     INT UNSIGNED NOT NULL,
+    member_id    INT UNSIGNED NOT NULL,
+    membership_no VARCHAR(30) NOT NULL,
+    period       CHAR(7)      NOT NULL,
+    amount       DECIMAL(15,2) NOT NULL,
+    status       ENUM('posted','skipped','failed') NOT NULL DEFAULT 'posted',
+    receipt_no   VARCHAR(30)  DEFAULT NULL,
+    payment_id   INT UNSIGNED DEFAULT NULL,
+    error        VARCHAR(255) DEFAULT NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mci_batch_member (batch_id, membership_no),
+    UNIQUE KEY uq_mci_member_period (member_id, period),
+    KEY idx_mci_status (status),
+    CONSTRAINT fk_mci_batch FOREIGN KEY (batch_id) REFERENCES monthly_contribution_batches (id) ON DELETE CASCADE,
+    CONSTRAINT fk_mci_member FOREIGN KEY (member_id) REFERENCES members (id) ON DELETE CASCADE,
+    CONSTRAINT fk_mci_payment FOREIGN KEY (payment_id) REFERENCES payments (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

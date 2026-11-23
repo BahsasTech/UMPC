@@ -49,7 +49,8 @@ function record_savings_contribution(int $memberId, string $type, float $amount,
 
         $pdo->commit();
         audit('savings_contribution', 'savings_accounts', (int) $account['id'], money($amount) . ' to ' . $type);
-        post_savings_entry((string) ($meta['method'] ?? 'cash'), $type, $amount, $meta['reference'] ?? null, $paymentId);
+        $entryDate = substr((string) ($meta['paid_at'] ?? ''), 0, 10);
+        post_savings_entry((string) ($meta['method'] ?? 'cash'), $type, $amount, $meta['reference'] ?? null, $paymentId, $entryDate !== '' ? $entryDate : null);
         return ['receipt_no' => $receipt, 'payment_id' => $paymentId, 'balance' => $newBalance];
     } catch (Throwable $e) {
         $pdo->rollBack();

@@ -41,7 +41,8 @@ $types = ['loan_repayment', 'savings_contribution', 'share_capital', 'special_sa
 $methods = ['cash', 'bank_transfer', 'paystack', 'remita', 'other'];
 
 render_header('Payments', $user, [
-    'actions' => '<a class="btn btn-outline-success btn-sm" href="/export.php?type=payments&from=' . urlencode($filters['from']) . '&to=' . urlencode($filters['to']) . '&search=' . urlencode($filters['search']) . '"><i class="bi bi-filetype-csv"></i> Export</a>',
+    'actions' => '<a class="btn btn-outline-primary btn-sm" href="/admin/monthly-contributions.php"><i class="bi bi-upload"></i> Monthly upload</a>'
+        . '<a class="btn btn-outline-success btn-sm" href="/export.php?type=payments&from=' . urlencode($filters['from']) . '&to=' . urlencode($filters['to']) . '&search=' . urlencode($filters['search']) . '"><i class="bi bi-filetype-csv"></i> Export</a>',
 ]);
 ?>
 <div class="row g-4">

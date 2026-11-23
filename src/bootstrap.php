@@ -32,6 +32,7 @@ require_once APP_ROOT . '/src/notifications.php';
 require_once APP_ROOT . '/src/accounting.php';
 require_once APP_ROOT . '/src/store.php';
 require_once APP_ROOT . '/src/import.php';
+require_once APP_ROOT . '/src/monthly-contributions.php';
 require_once APP_ROOT . '/src/gateway.php';
 require_once APP_ROOT . '/src/reminders.php';
 
