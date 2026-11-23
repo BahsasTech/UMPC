@@ -583,7 +583,7 @@ CREATE TABLE IF NOT EXISTS app_sessions (
 -- Staged CSV uploads for the legacy importer (stateless-safe)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS import_uploads (
-    token      VARCHAR(32)  NOT NULL,
+    token      VARCHAR(64)  NOT NULL,
     filename   VARCHAR(190) DEFAULT NULL,
     content    LONGTEXT     NOT NULL,
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

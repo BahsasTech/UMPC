@@ -425,7 +425,7 @@ CREATE TABLE IF NOT EXISTS app_sessions (
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON app_sessions (expires_at);
 
 CREATE TABLE IF NOT EXISTS import_uploads (
-    token      VARCHAR(32) PRIMARY KEY,
+    token      VARCHAR(64) PRIMARY KEY,
     filename   VARCHAR(190),
     content    TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

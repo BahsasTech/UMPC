@@ -163,6 +163,19 @@ try {
     echo "✓ NPA member fields ready.\n";
 
     if ($pgsql) {
+        $tokenLength = fetch_value("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'import_uploads' AND column_name = 'token'");
+        if ($tokenLength !== false && (int) $tokenLength < 64) {
+            $pdo->exec('ALTER TABLE import_uploads ALTER COLUMN token TYPE VARCHAR(64)');
+        }
+    } else {
+        $tokenLength = fetch_value("SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'import_uploads' AND column_name = 'token'");
+        if ($tokenLength !== false && (int) $tokenLength < 64) {
+            $pdo->exec('ALTER TABLE `import_uploads` MODIFY COLUMN `token` VARCHAR(64) NOT NULL');
+        }
+    }
+    echo "✓ Import upload token field ready.\n";
+
+    if ($pgsql) {
         $hasTxnIndex = fetch_value("SELECT 1 FROM pg_indexes WHERE tablename = 'payment_requests' AND indexname = 'uq_payment_requests_txn'");
         if (!$hasTxnIndex) {
             $pdo->exec('CREATE UNIQUE INDEX uq_payment_requests_txn ON payment_requests (transaction_reference)');
