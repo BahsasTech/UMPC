@@ -141,6 +141,27 @@ try {
     }
     echo "✓ Member assignment field ready.\n";
 
+    $memberFields = [
+        'pn_number'   => ['mysql' => 'VARCHAR(50) DEFAULT NULL AFTER `occupation`', 'pgsql' => 'VARCHAR(50)'],
+        'npa_branch'  => ['mysql' => "ENUM('LPC','Tincan','Leki Port','Onne','Rivers Port','Abuja Office') DEFAULT NULL AFTER `pn_number`", 'pgsql' => "VARCHAR(40) CHECK (npa_branch IN ('LPC','Tincan','Leki Port','Onne','Rivers Port','Abuja Office'))"],
+        'department'  => ['mysql' => 'VARCHAR(120) DEFAULT NULL AFTER `npa_branch`', 'pgsql' => 'VARCHAR(120)'],
+        'designation' => ['mysql' => 'VARCHAR(120) DEFAULT NULL AFTER `department`', 'pgsql' => 'VARCHAR(120)'],
+    ];
+    foreach ($memberFields as $column => $definition) {
+        if ($pgsql) {
+            $exists = fetch_value('SELECT 1 FROM information_schema.columns WHERE table_name = \'members\' AND column_name = ?', [$column]);
+            if (!$exists) {
+                $pdo->exec('ALTER TABLE members ADD COLUMN ' . $column . ' ' . $definition['pgsql']);
+            }
+        } else {
+            $exists = fetch_value("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'members' AND column_name = ?", [$column]);
+            if (!$exists) {
+                $pdo->exec('ALTER TABLE `members` ADD COLUMN `' . $column . '` ' . $definition['mysql']);
+            }
+        }
+    }
+    echo "✓ NPA member fields ready.\n";
+
     if ($pgsql) {
         $hasTxnIndex = fetch_value("SELECT 1 FROM pg_indexes WHERE tablename = 'payment_requests' AND indexname = 'uq_payment_requests_txn'");
         if (!$hasTxnIndex) {

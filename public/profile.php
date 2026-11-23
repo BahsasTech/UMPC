@@ -23,6 +23,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'marital_status' => post('marital_status'),
                     'address' => post('address'),
                     'occupation' => post('occupation'),
+                    'pn_number' => post('pn_number'),
+                    'npa_branch' => post('npa_branch'),
+                    'department' => post('department'),
+                    'designation' => post('designation'),
                     'monthly_income' => post('monthly_income'),
                     'bank_name' => post('bank_name'),
                     'bank_account_name' => post('bank_account_name'),
@@ -118,6 +122,15 @@ render_header('My Profile', $user);
                     <div class="col-md-8"><label class="form-label">Address</label><input class="form-control" name="address" value="<?= e($member['address']) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Occupation</label><input class="form-control" name="occupation" value="<?= e($member['occupation']) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Monthly income</label><input type="number" step="0.01" class="form-control" name="monthly_income" value="<?= e($member['monthly_income']) ?>"></div>
+                    <div class="col-md-3"><label class="form-label">PN number</label><input class="form-control" name="pn_number" value="<?= e($member['pn_number'] ?? '') ?>"></div>
+                    <div class="col-md-3"><label class="form-label">NPA branch</label>
+                        <select class="form-select" name="npa_branch">
+                            <option value="">Select…</option>
+                            <?php foreach (NPA_BRANCHES as $branch): ?><option value="<?= e($branch) ?>" <?= ($member['npa_branch'] ?? '') === $branch ? 'selected' : '' ?>><?= e($branch) ?></option><?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3"><label class="form-label">Department</label><input class="form-control" name="department" value="<?= e($member['department'] ?? '') ?>"></div>
+                    <div class="col-md-3"><label class="form-label">Designation</label><input class="form-control" name="designation" value="<?= e($member['designation'] ?? '') ?>"></div>
                     <div class="col-md-4"><label class="form-label">Bank name</label><input class="form-control" name="bank_name" value="<?= e($member['bank_name']) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Account name</label><input class="form-control" name="bank_account_name" value="<?= e($member['bank_account_name']) ?>"></div>
                     <div class="col-md-4"><label class="form-label">Account number</label><input class="form-control" name="bank_account_no" value="<?= e($member['bank_account_no']) ?>"></div>

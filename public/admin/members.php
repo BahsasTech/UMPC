@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'create') {
             'marital_status' => (string) post('marital_status'),
             'address' => (string) post('address'),
             'occupation' => (string) post('occupation'),
+            'pn_number' => (string) post('pn_number'),
+            'npa_branch' => (string) post('npa_branch'),
+            'department' => (string) post('department'),
+            'designation' => (string) post('designation'),
             'monthly_income' => (string) post('monthly_income'),
             'bank_name' => (string) post('bank_name'),
             'bank_account_name' => (string) post('bank_account_name'),
@@ -115,6 +119,12 @@ render_header('Members', $user, [
                     <div class="col-md-8"><label class="form-label">Address</label><input class="form-control" name="address"></div>
                     <div class="col-md-4"><label class="form-label">Occupation</label><input class="form-control" name="occupation"></div>
                     <div class="col-md-4"><label class="form-label">Monthly income</label><input type="number" step="0.01" class="form-control" name="monthly_income"></div>
+                    <div class="col-md-3"><label class="form-label">PN number</label><input class="form-control" name="pn_number"></div>
+                    <div class="col-md-3"><label class="form-label">NPA branch</label>
+                        <select class="form-select" name="npa_branch"><option value="">Select…</option><?php foreach (NPA_BRANCHES as $branch): ?><option value="<?= e($branch) ?>"><?= e($branch) ?></option><?php endforeach; ?></select>
+                    </div>
+                    <div class="col-md-3"><label class="form-label">Department</label><input class="form-control" name="department"></div>
+                    <div class="col-md-3"><label class="form-label">Designation</label><input class="form-control" name="designation"></div>
                     <div class="col-md-4"><label class="form-label">Bank</label><input class="form-control" name="bank_name"></div>
                     <div class="col-md-4"><label class="form-label">Account name</label><input class="form-control" name="bank_account_name"></div>
                     <div class="col-md-4"><label class="form-label">Account number</label><input class="form-control" name="bank_account_no"></div>

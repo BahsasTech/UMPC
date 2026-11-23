@@ -12,6 +12,10 @@ const SAVINGS_PRODUCTS = [
     'special_housing' => 'Special Savings (Housing)',
 ];
 
+const NPA_BRANCHES = [
+    'LPC', 'Tincan', 'Leki Port', 'Onne', 'Rivers Port', 'Abuja Office',
+];
+
 /** Create the standard savings accounts for a new member. */
 function create_savings_accounts(int $memberId): void
 {
@@ -87,7 +91,8 @@ function update_member_profile(int $memberId, array $data): void
 {
     $allowed = [
         'first_name', 'last_name', 'other_names', 'gender', 'date_of_birth',
-        'marital_status', 'address', 'occupation', 'monthly_income',
+        'marital_status', 'address', 'occupation', 'pn_number', 'npa_branch',
+        'department', 'designation', 'monthly_income',
         'bank_name', 'bank_account_name', 'bank_account_no', 'status',
     ];
     $clean = [];
@@ -95,6 +100,10 @@ function update_member_profile(int $memberId, array $data): void
         if (array_key_exists($field, $data)) {
             $clean[$field] = $data[$field] === '' ? null : $data[$field];
         }
+    }
+    if (array_key_exists('npa_branch', $clean) && $clean['npa_branch'] !== null
+        && !in_array($clean['npa_branch'], NPA_BRANCHES, true)) {
+        $clean['npa_branch'] = null;
     }
     if (isset($clean['monthly_income'])) {
         $clean['monthly_income'] = to_amount($clean['monthly_income']);

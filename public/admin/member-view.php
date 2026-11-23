@@ -23,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'other_names' => post('other_names'), 'gender' => post('gender'),
                     'date_of_birth' => post('date_of_birth'), 'marital_status' => post('marital_status'),
                     'address' => post('address'), 'occupation' => post('occupation'),
+                    'pn_number' => post('pn_number'), 'npa_branch' => post('npa_branch'),
+                    'department' => post('department'), 'designation' => post('designation'),
                     'monthly_income' => post('monthly_income'), 'bank_name' => post('bank_name'),
                     'bank_account_name' => post('bank_account_name'), 'bank_account_no' => post('bank_account_no'),
                 ]);
@@ -123,6 +125,23 @@ render_header('Member · ' . $member['membership_no'], $user, [
                 <button class="btn btn-sm btn-outline-<?= $member['status'] === 'active' ? 'danger' : 'success' ?> w-100">
                     <i class="bi bi-power"></i> <?= $member['status'] === 'active' ? 'Deactivate' : 'Activate' ?>
                 </button>
+            </form>
+        </div>
+
+        <div class="card p-4 mb-4">
+            <h6 class="mb-3">NPA details</h6>
+            <form method="post" class="row g-2">
+                <?= csrf_field() ?><input type="hidden" name="action" value="profile">
+                <div class="col-12"><label class="form-label small">PN number</label><input class="form-control form-control-sm" name="pn_number" value="<?= e($member['pn_number'] ?? '') ?>"></div>
+                <div class="col-12"><label class="form-label small">NPA branch</label>
+                    <select class="form-select form-select-sm" name="npa_branch">
+                        <option value="">Select…</option>
+                        <?php foreach (NPA_BRANCHES as $branch): ?><option value="<?= e($branch) ?>" <?= ($member['npa_branch'] ?? '') === $branch ? 'selected' : '' ?>><?= e($branch) ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small">Department</label><input class="form-control form-control-sm" name="department" value="<?= e($member['department'] ?? '') ?>"></div>
+                <div class="col-12"><label class="form-label small">Designation</label><input class="form-control form-control-sm" name="designation" value="<?= e($member['designation'] ?? '') ?>"></div>
+                <div class="col-12"><button class="btn btn-sm btn-outline-primary w-100">Save NPA details</button></div>
             </form>
         </div>
 

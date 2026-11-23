@@ -13,7 +13,8 @@ $errors = [];
 $values = [
     'first_name' => '', 'last_name' => '', 'other_names' => '', 'email' => '',
     'phone' => '', 'gender' => '', 'date_of_birth' => '', 'address' => '',
-    'occupation' => '', 'monthly_income' => '',
+    'occupation' => '', 'monthly_income' => '', 'pn_number' => '',
+    'npa_branch' => '', 'department' => '', 'designation' => '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -105,6 +106,31 @@ render_header('Create account', null);
                         <div class="col-md-6">
                             <label class="form-label">Address</label>
                             <input class="form-control" name="address" value="<?= e($values['address']) ?>">
+                        </div>
+                    </div>
+
+                    <h6 class="text-muted text-uppercase small mt-4">NPA details</h6>
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">PN number</label>
+                            <input class="form-control" name="pn_number" value="<?= e($values['pn_number']) ?>" placeholder="e.g. PN-12345">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">NPA branch</label>
+                            <select class="form-select" name="npa_branch">
+                                <option value="">Select…</option>
+                                <?php foreach (NPA_BRANCHES as $branch): ?>
+                                    <option value="<?= e($branch) ?>" <?= $values['npa_branch'] === $branch ? 'selected' : '' ?>><?= e($branch) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Department</label>
+                            <input class="form-control" name="department" value="<?= e($values['department']) ?>">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Designation</label>
+                            <input class="form-control" name="designation" value="<?= e($values['designation']) ?>">
                         </div>
                     </div>
 

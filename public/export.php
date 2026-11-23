@@ -62,11 +62,12 @@ try {
             require_staff();
             $rows = array_map(fn($r) => [
                 $r['membership_no'], $r['first_name'] . ' ' . $r['last_name'], $r['email'],
-                $r['phone'] ?? '', label($r['status']), number_format((float) $r['savings_total'], 2, '.', ''),
+                $r['phone'] ?? '', $r['pn_number'] ?? '', $r['npa_branch'] ?? '',
+                $r['department'] ?? '', $r['designation'] ?? '', label($r['status']), number_format((float) $r['savings_total'], 2, '.', ''),
                 number_format((float) $r['loan_outstanding'], 2, '.', ''), fmt_date($r['joined_at'], 'Y-m-d'),
             ], list_members($search, $status));
             csv_output('members-' . date('Ymd') . '.csv',
-                ['Membership', 'Name', 'Email', 'Phone', 'Status', 'Savings', 'Loan outstanding', 'Joined'], $rows);
+                ['Membership', 'Name', 'Email', 'Phone', 'PN number', 'NPA branch', 'Department', 'Designation', 'Status', 'Savings', 'Loan outstanding', 'Joined'], $rows);
             break;
 
         case 'member_positions':
